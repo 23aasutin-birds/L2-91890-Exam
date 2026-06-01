@@ -12,6 +12,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.herptofauna.ui.theme.HerptofaunaTheme
+import androidx.compose.material3.Button
+import androidx.compose.foundation.layout.Column
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -19,29 +21,25 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             HerptofaunaTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Android",
-                        modifier = Modifier.padding(innerPadding)
-                    )
+                HomePage()
                 }
             }
+        }
+}
+
+@Preview(
+    showBackground = true
+)
+@Composable
+fun HomePage(modifier: Modifier = Modifier) {
+    Column {
+        Button(onClick = { ChecklistPage() }) {
+            Text("Start Survey")
         }
     }
 }
 
 @Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    HerptofaunaTheme {
-        Greeting("Android")
-    }
+fun ChecklistPage(modifier: Modifier = Modifier) {
+    // Continue here...
 }
