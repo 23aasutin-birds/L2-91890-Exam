@@ -14,6 +14,12 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.example.herptofauna.ui.theme.HerptofaunaTheme
 import androidx.compose.material3.Button
 import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.Arrangement
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.NavController
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -21,25 +27,97 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             HerptofaunaTheme {
-                HomePage()
+                HerptofaunaNavigation()
                 }
             }
         }
 }
 
-@Preview(
-    showBackground = true
-)
+sealed class HerptofaunaScreen(val route: String) {
+    object HomePage : HerptofaunaScreen("home_page")
+    object ChecklistPage : HerptofaunaScreen("checklist_page")
+    object SpeciesPage : HerptofaunaScreen("species_page")
+    object SubmitPage : HerptofaunaScreen("submit_page")
+}
+
 @Composable
-fun HomePage(modifier: Modifier = Modifier) {
-    Column {
-        Button(onClick = { ChecklistPage() }) {
+fun HerptofaunaNavigation() {
+    val navController = rememberNavController()
+
+    NavHost(
+        navController = navController,
+        startDestination = HerptofaunaScreen.HomePage.route
+    ) {
+        composable(route = HerptofaunaScreen.HomePage.route) {
+            HomePageLayout(navController = navController)
+        }
+        composable(route = HerptofaunaScreen.ChecklistPage.route) {
+            ChecklistPageLayout(navController = navController)
+        }
+        composable(route = HerptofaunaScreen.SpeciesPage.route) {
+            SpeciesPageLayout(navController = navController)
+        }
+        composable(route = HerptofaunaScreen.SubmitPage.route) {
+            SubmitPageLayout(navController = navController)
+        }
+    }
+}
+
+@Composable
+fun HomePageLayout(navController : NavController, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Button(onClick = {navController.navigate(HerptofaunaScreen.ChecklistPage.route)}) {
             Text("Start Survey")
         }
     }
 }
 
 @Composable
-fun ChecklistPage(modifier: Modifier = Modifier) {
-    // Continue here...
+fun ChecklistPageLayout(navController : NavController, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Button(onClick = {navController.navigate(HerptofaunaScreen.SpeciesPage.route)}) {
+            Text("See Species")
+        }
+        Button(onClick = {navController.navigate(HerptofaunaScreen.SubmitPage.route)}) {
+            Text("Stop Checklist")
+        }
+    }
+}
+
+@Composable
+fun SpeciesPageLayout(navController: NavController, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Button(onClick = {navController.popBackStack()}) {
+            Text("Back")
+        }
+    }
+}
+
+@Composable
+fun SubmitPageLayout(navController: NavController, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Button(onClick = {navController.navigate(HerptofaunaScreen.HomePage.route)}) {
+            Text("Back to Home Page")
+        }
+    }
 }
