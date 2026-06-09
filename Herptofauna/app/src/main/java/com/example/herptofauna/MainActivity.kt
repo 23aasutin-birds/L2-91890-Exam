@@ -20,6 +20,15 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.NavController
+import androidx.room.Dao
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+import androidx.room.Insert
+import androidx.room.Delete
+import kotlinx.coroutines.flow.Flow
+import android.icu.text.MessagePattern.ArgType.SELECT
+import androidx.room.Query
+import androidx.room.Update
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,6 +47,27 @@ sealed class HerptofaunaScreen(val route: String) {
     object ChecklistPage : HerptofaunaScreen("checklist_page")
     object SpeciesPage : HerptofaunaScreen("species_page")
     object SubmitPage : HerptofaunaScreen("submit_page")
+}
+
+@Entity (tableName = "observation")
+data class Observation(
+    @PrimaryKey
+    val id: Int = 0,
+    val location: String,
+    val species: String,
+    val count: Int
+)
+
+@Dao
+interface ObservationDao {
+    @Insert
+    suspend fun insertObservation(observation: Observation)
+
+    @Update
+    suspend fun updateObservation(observation: Observation)
+
+    @Query ("SELECT count FROM observation")
+    fun getCount(): Flow<List<Observation>> // Creates constant update loop to databse
 }
 
 @Composable
@@ -79,6 +109,7 @@ fun HomePageLayout(navController : NavController, modifier: Modifier = Modifier)
 
 @Composable
 fun ChecklistPageLayout(navController : NavController, modifier: Modifier = Modifier) {
+    var countMccannSkink: Int = 0
     Column(
         modifier = modifier
             .fillMaxSize(),
@@ -90,6 +121,9 @@ fun ChecklistPageLayout(navController : NavController, modifier: Modifier = Modi
         }
         Button(onClick = {navController.navigate(HerptofaunaScreen.SubmitPage.route)}) {
             Text("Stop Checklist")
+        }
+        Button(onClick = {countMccannSkink + 1}) {
+            Text("Add a Mccann's Skink. ($countMccannSkink)")
         }
     }
 }
@@ -117,7 +151,7 @@ fun SubmitPageLayout(navController: NavController, modifier: Modifier = Modifier
         verticalArrangement = Arrangement.Center
     ) {
         Button(onClick = {navController.navigate(HerptofaunaScreen.HomePage.route)}) {
-            Text("Back to Home Page")
+            Text("Confirm & Submit")
         }
     }
 }
