@@ -28,7 +28,11 @@ import androidx.room.Delete
 import kotlinx.coroutines.flow.Flow
 import android.icu.text.MessagePattern.ArgType.SELECT
 import androidx.room.Query
+import androidx.room.RoomDatabase
 import androidx.room.Update
+import android.content.Context
+import androidx.room.Database
+import androidx.room.Room
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -42,13 +46,7 @@ class MainActivity : ComponentActivity() {
         }
 }
 
-sealed class HerptofaunaScreen(val route: String) {
-    object HomePage : HerptofaunaScreen("home_page")
-    object ChecklistPage : HerptofaunaScreen("checklist_page")
-    object SpeciesPage : HerptofaunaScreen("species_page")
-    object SubmitPage : HerptofaunaScreen("submit_page")
-}
-
+// Sets up table
 @Entity (tableName = "observation")
 data class Observation(
     @PrimaryKey
@@ -58,18 +56,51 @@ data class Observation(
     val count: Int
 )
 
+// Sets actions available in program
 @Dao
-interface ObservationDao {
+interface ObservationDoa {
     @Insert
     suspend fun insertObservation(observation: Observation)
 
     @Update
-    suspend fun updateObservation(observation: Observation)
+    suspend fun updateObservation(observation: Observation) // suspend forces action into the background (UI doesn't freeze)
 
     @Query ("SELECT count FROM observation")
-    fun getCount(): Flow<List<Observation>> // Creates constant update loop to databse
+    fun getCount(): Flow<List<Observation>> // Creates constant update loop to database
 }
 
+// Sets up connection between database, room and the app
+@Database(entities = [Observation::class], version = 1, exportSchema = false)
+abstract class HerptofaunaDatabase : RoomDatabase() { // abstract is to make a blueprint class
+    abstract fun observationDao(): ObservationDoa // Connects DAO interface to connect to room and the database
+
+    companion object { // Creates global class (instead of local class)
+        @Volatile // Makes sure INSTANCE is consistent
+        private var INSTANCE: HerptofaunaDatabase? = null // The only copy of the database
+
+        fun getDatabase(context: Context): HerptofaunaDatabase { // Will use this function to access database
+            return INSTANCE ?: synchronized(this) { // If ready to build return immediately, makes sure only 1 function accessing at a time
+                val instance = Room.databaseBuilder( // Builds database
+                    context.applicationContext,
+                    HerptofaunaDatabase::class.java, // Tells which class room will use
+                    "herptofauna_database"
+                ).build()
+                INSTANCE = instance // Saves database as global variable
+                instance // Return instance
+            }
+        }
+    }
+}
+
+// Creates routes to each page for navController to follow
+sealed class HerptofaunaScreen(val route: String) {
+    object HomePage : HerptofaunaScreen("home_page")
+    object ChecklistPage : HerptofaunaScreen("checklist_page")
+    object SpeciesPage : HerptofaunaScreen("species_page")
+    object SubmitPage : HerptofaunaScreen("submit_page")
+}
+
+// Tells navController what do to at the end of each route (I guess???)
 @Composable
 fun HerptofaunaNavigation() {
     val navController = rememberNavController()
@@ -92,6 +123,8 @@ fun HerptofaunaNavigation() {
         }
     }
 }
+
+// All layouts (4 pages)
 
 @Composable
 fun HomePageLayout(navController : NavController, modifier: Modifier = Modifier) {
