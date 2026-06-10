@@ -5,12 +5,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
 import com.example.herptofauna.ui.theme.HerptofaunaTheme
 import androidx.compose.material3.Button
 import androidx.compose.foundation.layout.Column
@@ -24,15 +21,18 @@ import androidx.room.Dao
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import androidx.room.Insert
-import androidx.room.Delete
-import kotlinx.coroutines.flow.Flow
-import android.icu.text.MessagePattern.ArgType.SELECT
-import androidx.room.Query
 import androidx.room.RoomDatabase
-import androidx.room.Update
 import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
+import kotlinx.coroutines.launch
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -49,7 +49,7 @@ class MainActivity : ComponentActivity() {
 // Sets up table
 @Entity (tableName = "observation")
 data class Observation(
-    @PrimaryKey
+    @PrimaryKey (autoGenerate = true)
     val id: Int = 0,
     val location: String,
     val species: String,
@@ -58,21 +58,15 @@ data class Observation(
 
 // Sets actions available in program
 @Dao
-interface ObservationDoa {
+interface ObservationDao {
     @Insert
     suspend fun insertObservation(observation: Observation)
-
-    @Update
-    suspend fun updateObservation(observation: Observation) // suspend forces action into the background (UI doesn't freeze)
-
-    @Query ("SELECT count FROM observation")
-    fun getCount(): Flow<List<Observation>> // Creates constant update loop to database
 }
 
 // Sets up connection between database, room and the app
 @Database(entities = [Observation::class], version = 1, exportSchema = false)
 abstract class HerptofaunaDatabase : RoomDatabase() { // abstract is to make a blueprint class
-    abstract fun observationDao(): ObservationDoa // Connects DAO interface to connect to room and the database
+    abstract fun observationDao(): ObservationDao // Connects DAO interface to connect to room and the database
 
     companion object { // Creates global class (instead of local class)
         @Volatile // Makes sure INSTANCE is consistent
@@ -98,6 +92,16 @@ sealed class HerptofaunaScreen(val route: String) {
     object ChecklistPage : HerptofaunaScreen("checklist_page")
     object SpeciesPage : HerptofaunaScreen("species_page")
     object SubmitPage : HerptofaunaScreen("submit_page")
+}
+
+fun addObservation(observationDao: ObservationDao, location: String, species: String, count: Int) {
+    CoroutineScope(Dispatchers.IO).launch {
+        val newObservation =
+            Observation(location = location, species = species, count = count)
+        observationDao.insertObservation(newObservation)
+        println("Done!")
+
+    }
 }
 
 // Tells navController what do to at the end of each route (I guess???)
@@ -142,7 +146,12 @@ fun HomePageLayout(navController : NavController, modifier: Modifier = Modifier)
 
 @Composable
 fun ChecklistPageLayout(navController : NavController, modifier: Modifier = Modifier) {
-    var countMccannSkink: Int = 0
+    var countMccannSkink by remember { mutableStateOf(0) }
+
+    val context = LocalContext.current
+    val database = HerptofaunaDatabase.getDatabase(context)
+    val observationDao = database.observationDao()
+
     Column(
         modifier = modifier
             .fillMaxSize(),
@@ -152,10 +161,13 @@ fun ChecklistPageLayout(navController : NavController, modifier: Modifier = Modi
         Button(onClick = {navController.navigate(HerptofaunaScreen.SpeciesPage.route)}) {
             Text("See Species")
         }
-        Button(onClick = {navController.navigate(HerptofaunaScreen.SubmitPage.route)}) {
+        Button(onClick = {
+            addObservation(observationDao = observationDao, location = "WHS", species = "Mccann's Skink", count = countMccannSkink)
+            navController.navigate(HerptofaunaScreen.SubmitPage.route)
+        }) {
             Text("Stop Checklist")
         }
-        Button(onClick = {countMccannSkink + 1}) {
+        Button(onClick = { countMccannSkink++ }) {
             Text("Add a Mccann's Skink. ($countMccannSkink)")
         }
     }
