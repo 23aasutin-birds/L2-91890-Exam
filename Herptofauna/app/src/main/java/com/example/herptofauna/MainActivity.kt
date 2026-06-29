@@ -23,6 +23,7 @@ import androidx.room.PrimaryKey
 import androidx.room.Insert
 import androidx.room.RoomDatabase
 import android.content.Context
+import androidx.annotation.StringRes
 import androidx.room.Database
 import androidx.room.Room
 import kotlinx.coroutines.launch
@@ -33,6 +34,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.room.ForeignKey
+import androidx.room.TypeConverter
+import java.time.LocalDateTime
+import androidx.room.TypeConverters
+import androidx.room.Query
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -43,31 +49,107 @@ class MainActivity : ComponentActivity() {
                 HerptofaunaNavigation()
                 }
             }
+        val db = Room.databaseBuilder(
+            applicationContext,
+            HerptofaunaDatabase::class.java,
+            "species_data"
+        )
+            .createFromAsset("species_data")
+            .allowMainThreadQueries()
+            .build()
+        val species_dao = db.speciesDoa()
+        val all_species: List<Species> = species_dao.get_all_species()
+        for (species in all_species) {
+            println("Found item: ${species.scientificName} is a ${species.englishName}!")
         }
+    }
 }
 
-// Sets up table
+class DateTimeConverters {
+    @TypeConverter
+    fun dateToString(value: String?): LocalDateTime? {
+        return value?.let { LocalDateTime.parse(it) }
+    }
+
+    fun dateToString(value: LocalDateTime?): String? {
+        return date?.toString()
+    }
+}
+
+// Observation table
 @Entity (tableName = "observation")
 data class Observation(
     @PrimaryKey (autoGenerate = true)
-    val id: Int = 0,
+    val eventId: Int = 0,
     val location: String,
-    val species: String,
-    val count: Int
+    val dateTime: LocalDateTime,
+    val duration: Int,
 )
 
-// Sets actions available in program
 @Dao
 interface ObservationDao {
     @Insert
     suspend fun insertObservation(observation: Observation)
 }
 
+// Checklist table
+@Entity ("checklist",
+    foreignKeys = [
+        ForeignKey(
+            entity = Observation::class,
+            parentColumns = ["observationID"],
+            childColumns = ["observationID"],
+        ), // Declares species F-Key
+        ForeignKey(
+            entity = Species::class,
+            parentColumns = ["speciesID"],
+            childColumns = ["speciesID"],
+        ) // Declares species F-Key
+    ])
+data class Checklist(
+    @PrimaryKey (autoGenerate = true)
+    val observationId: Int,
+    val eventId: Int, // F-Key
+    val speciesId: Int, // F-Key
+    val count: Int,
+    val userComment: String,
+    val image: String,
+)
+
+@Dao
+interface ChecklistDoa {
+    @Insert
+    suspend fun insertChecklist(checklist: Checklist)
+}
+
+// Species table
+@Entity (tableName = "species_data")
+data class Species(
+    @PrimaryKey (autoGenerate = true)
+    val speciesId: Int,
+    val scientificName: String,
+    val englishName: String,
+    val speciesComment: String,
+)
+
+@Dao
+interface SpeciesDoa {
+    @Query("SELECT * FROM species_data")
+    fun get_all_species(): List<Species>
+    // Stuff in here...
+}
+
+
 // Sets up connection between database, room and the app
+
+@TypeConverters(DateTimeConverters::class)
 @Database(entities = [Observation::class], version = 1, exportSchema = false)
 abstract class HerptofaunaDatabase : RoomDatabase() { // abstract is to make a blueprint class
-    abstract fun observationDao(): ObservationDao // Connects DAO interface to connect to room and the database
 
+    // Observation table
+    abstract fun checklistDao(): ChecklistDoa
+    abstract fun speciesDao(): SpeciesDoa
+    abstract fun observationDao(): ObservationDao // Connects DAO interface to connect to room and the database
     companion object { // Creates global class (instead of local class)
         @Volatile // Makes sure INSTANCE is consistent
         private var INSTANCE: HerptofaunaDatabase? = null // The only copy of the database
