@@ -52,26 +52,28 @@ class MainActivity : ComponentActivity() {
         val db = Room.databaseBuilder(
             applicationContext,
             HerptofaunaDatabase::class.java,
-            "species_data"
+            "species_database"
         )
-            .createFromAsset("species_data")
+            .createFromAsset("species_database")
             .allowMainThreadQueries()
             .build()
-        val species_dao = db.speciesDoa()
-        val all_species: List<Species> = species_dao.get_all_species()
+        val species_dao = db.speciesDao()
+        val all_species: List<Species> = species_dao.getAllSpecies()
         for (species in all_species) {
             println("Found item: ${species.scientificName} is a ${species.englishName}!")
         }
     }
 }
 
+// LocalDateTime converters
 class DateTimeConverters {
     @TypeConverter
     fun dateToString(value: String?): LocalDateTime? {
         return value?.let { LocalDateTime.parse(it) }
     }
 
-    fun dateToString(value: LocalDateTime?): String? {
+    @TypeConverter
+    fun stringToDate(date: LocalDateTime?): String? {
         return date?.toString()
     }
 }
@@ -97,13 +99,13 @@ interface ObservationDao {
     foreignKeys = [
         ForeignKey(
             entity = Observation::class,
-            parentColumns = ["observationID"],
-            childColumns = ["observationID"],
+            parentColumns = ["eventId"],
+            childColumns = ["eventId"],
         ), // Declares species F-Key
         ForeignKey(
             entity = Species::class,
-            parentColumns = ["speciesID"],
-            childColumns = ["speciesID"],
+            parentColumns = ["speciesId"],
+            childColumns = ["speciesId"],
         ) // Declares species F-Key
     ])
 data class Checklist(
@@ -119,7 +121,7 @@ data class Checklist(
 @Dao
 interface ChecklistDoa {
     @Insert
-    suspend fun insertChecklist(checklist: Checklist)
+    suspend fun insertChecklistItems(checklist: List<Checklist>)
 }
 
 // Species table
@@ -135,15 +137,20 @@ data class Species(
 @Dao
 interface SpeciesDoa {
     @Query("SELECT * FROM species_data")
-    fun get_all_species(): List<Species>
-    // Stuff in here...
+    fun getAllSpecies(): List<Species>
+
+    @Query("SELECT * FROM species_data WHERE speciesId = :id")
+    fun getSpeciesData(): Species?
+
+    @Query("SELECT englishName FROM species_data WHERE speciesId = :id")
+    fun getSpeciesName(): Species?
+
 }
 
 
-// Sets up connection between database, room and the app
-
+// Sets up connection between database, room and the app (abstract class)
 @TypeConverters(DateTimeConverters::class)
-@Database(entities = [Observation::class], version = 1, exportSchema = false)
+@Database(entities = [Observation::class, Checklist::class, Species::class], version = 1, exportSchema = false)
 abstract class HerptofaunaDatabase : RoomDatabase() { // abstract is to make a blueprint class
 
     // Observation table
@@ -176,16 +183,6 @@ sealed class HerptofaunaScreen(val route: String) {
     object SubmitPage : HerptofaunaScreen("submit_page")
 }
 
-fun addObservation(observationDao: ObservationDao, location: String, species: String, count: Int) {
-    CoroutineScope(Dispatchers.IO).launch {
-        val newObservation =
-            Observation(location = location, species = species, count = count)
-        observationDao.insertObservation(newObservation)
-        println("Done!")
-
-    }
-}
-
 // Tells navController what do to at the end of each route (I guess???)
 @Composable
 fun HerptofaunaNavigation() {
@@ -209,6 +206,28 @@ fun HerptofaunaNavigation() {
         }
     }
 }
+
+
+
+
+
+// Commits observation data
+
+fun commitObservation(observationDao: ObservationDao, location: String, dateTime: LocalDateTime, duration: Int) {
+    CoroutineScope(Dispatchers.IO).launch {
+        val newObservation = Observation(location = location, dateTime = dateTime, duration = duration)
+        observationDao.insertObservation(newObservation)
+    }
+}
+
+fun commitChecklist(checklistDao: ChecklistDoa, count: Int, userComment: String, eventId: Int, speciesId: Int) {
+    CoroutineScope(Dispatchers.IO).launch {
+        val newChecklist = Checklist(eventId, speciesId, count = count, userComment = userComment)// This has got to be a list will all the data in it
+        checklistDao.insertChecklistItems(newChecklist)
+    }
+}
+
+
 
 // All layouts (4 pages)
 
@@ -242,11 +261,11 @@ fun ChecklistPageLayout(navController : NavController, modifier: Modifier = Modi
     ) {
         Button(onClick = {navController.navigate(HerptofaunaScreen.SpeciesPage.route)}) {
             Text("See Species")
-        }
+        } // Goes to species page
         Button(onClick = {
             addObservation(observationDao = observationDao, location = "WHS", species = "Mccann's Skink", count = countMccannSkink)
             navController.navigate(HerptofaunaScreen.SubmitPage.route)
-        }) {
+        }) { // Commits data to Herptofauna Database
             Text("Stop Checklist")
         }
         Button(onClick = { countMccannSkink++ }) {
@@ -265,7 +284,7 @@ fun SpeciesPageLayout(navController: NavController, modifier: Modifier = Modifie
     ) {
         Button(onClick = {navController.popBackStack()}) {
             Text("Back")
-        }
+        } // Go back to checklist page
     }
 }
 
