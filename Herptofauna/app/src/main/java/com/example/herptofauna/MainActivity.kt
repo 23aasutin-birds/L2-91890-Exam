@@ -39,6 +39,7 @@ import androidx.room.TypeConverter
 import java.time.LocalDateTime
 import androidx.room.TypeConverters
 import androidx.room.Query
+import androidx.room.Index
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -100,14 +101,18 @@ interface ObservationDao {
         ForeignKey(
             entity = Observation::class,
             parentColumns = ["eventId"],
-            childColumns = ["eventId"],
-        ), // Declares species F-Key
+            childColumns = ["eventId"]
+        ), // Declares event F-Key
         ForeignKey(
             entity = Species::class,
             parentColumns = ["speciesId"],
             childColumns = ["speciesId"],
         ) // Declares species F-Key
-    ])
+    ],
+    indices = [
+        Index(value = ["eventId"]),
+        Index(value = ["speciesId"])]
+    )
 data class Checklist(
     @PrimaryKey (autoGenerate = true)
     val observationId: Int,
@@ -121,7 +126,7 @@ data class Checklist(
 @Dao
 interface ChecklistDoa {
     @Insert
-    suspend fun insertChecklistItems(checklist: List<Checklist>)
+    suspend fun insertChecklistItems(checklist: Checklist)
 }
 
 // Species table
@@ -140,10 +145,10 @@ interface SpeciesDoa {
     fun getAllSpecies(): List<Species>
 
     @Query("SELECT * FROM species_data WHERE speciesId = :id")
-    fun getSpeciesData(): Species?
+    fun getSpeciesData(id: Int): Species?
 
     @Query("SELECT englishName FROM species_data WHERE speciesId = :id")
-    fun getSpeciesName(): Species?
+    fun getSpeciesName(id: Int): String
 
 }
 
@@ -222,7 +227,7 @@ fun commitObservation(observationDao: ObservationDao, location: String, dateTime
 
 fun commitChecklist(checklistDao: ChecklistDoa, count: Int, userComment: String, eventId: Int, speciesId: Int) {
     CoroutineScope(Dispatchers.IO).launch {
-        val newChecklist = Checklist(eventId, speciesId, count = count, userComment = userComment)// This has got to be a list will all the data in it
+        val newChecklist = Checklist(observationId = eventId, eventId = speciesId, speciesId = speciesId, count = count, userComment = userComment, image = "To be added later")// This has got to be a list will all the data in it
         checklistDao.insertChecklistItems(newChecklist)
     }
 }
@@ -259,11 +264,10 @@ fun ChecklistPageLayout(navController : NavController, modifier: Modifier = Modi
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Button(onClick = {navController.navigate(HerptofaunaScreen.SpeciesPage.route)}) {
+        Button(onClick = { navController.navigate(HerptofaunaScreen.SpeciesPage.route) }) {
             Text("See Species")
         } // Goes to species page
         Button(onClick = {
-            addObservation(observationDao = observationDao, location = "WHS", species = "Mccann's Skink", count = countMccannSkink)
             navController.navigate(HerptofaunaScreen.SubmitPage.route)
         }) { // Commits data to Herptofauna Database
             Text("Stop Checklist")
@@ -273,6 +277,7 @@ fun ChecklistPageLayout(navController : NavController, modifier: Modifier = Modi
         }
     }
 }
+
 
 @Composable
 fun SpeciesPageLayout(navController: NavController, modifier: Modifier = Modifier) {
