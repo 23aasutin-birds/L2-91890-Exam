@@ -23,7 +23,6 @@ import androidx.room.PrimaryKey
 import androidx.room.Insert
 import androidx.room.RoomDatabase
 import android.content.Context
-import androidx.annotation.StringRes
 import androidx.room.Database
 import androidx.room.Room
 import kotlinx.coroutines.launch
@@ -36,45 +35,41 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.room.ForeignKey
 import androidx.room.TypeConverter
-import java.time.LocalDateTime
 import androidx.room.TypeConverters
 import androidx.room.Query
 import androidx.room.Index
+import androidx.compose.material3.TextField
+import java.time.LocalDateTime
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import java.time.Duration
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
         setContent {
             HerptofaunaTheme {
                 HerptofaunaNavigation()
-                }
             }
-        val db = Room.databaseBuilder(
-            applicationContext,
-            HerptofaunaDatabase::class.java,
-            "species_database"
-        )
-            .createFromAsset("species_database")
-            .allowMainThreadQueries()
-            .build()
-        val species_dao = db.speciesDao()
-        val all_species: List<Species> = species_dao.getAllSpecies()
-        for (species in all_species) {
-            println("Found item: ${species.scientificName} is a ${species.englishName}!")
         }
     }
 }
 
 // LocalDateTime converters
 class DateTimeConverters {
+
     @TypeConverter
-    fun dateToString(value: String?): LocalDateTime? {
+    fun stringToLocalDateTime (value: String?): LocalDateTime? {
         return value?.let { LocalDateTime.parse(it) }
     }
 
     @TypeConverter
-    fun stringToDate(date: LocalDateTime?): String? {
+    fun localDateTimeToString (date: LocalDateTime?): String? {
         return date?.toString()
     }
 }
@@ -92,7 +87,7 @@ data class Observation(
 @Dao
 interface ObservationDao {
     @Insert
-    suspend fun insertObservation(observation: Observation)
+    suspend fun insertObservation(observation: Observation): Long
 }
 
 // Checklist table
@@ -115,7 +110,7 @@ interface ObservationDao {
     )
 data class Checklist(
     @PrimaryKey (autoGenerate = true)
-    val observationId: Int,
+    val observationId: Int = 0,
     val eventId: Int, // F-Key
     val speciesId: Int, // F-Key
     val count: Int,
@@ -124,7 +119,7 @@ data class Checklist(
 )
 
 @Dao
-interface ChecklistDoa {
+interface ChecklistDao {
     @Insert
     suspend fun insertChecklistItems(checklist: Checklist)
 }
@@ -140,15 +135,15 @@ data class Species(
 )
 
 @Dao
-interface SpeciesDoa {
+interface SpeciesDao {
     @Query("SELECT * FROM species_data")
-    fun getAllSpecies(): List<Species>
+    suspend fun getAllSpecies(): List<Species>
 
     @Query("SELECT * FROM species_data WHERE speciesId = :id")
-    fun getSpeciesData(id: Int): Species?
+    suspend fun getSpeciesData(id: Int): Species?
 
     @Query("SELECT englishName FROM species_data WHERE speciesId = :id")
-    fun getSpeciesName(id: Int): String
+    suspend fun getSpeciesName(id: Int): String?
 
 }
 
@@ -159,8 +154,8 @@ interface SpeciesDoa {
 abstract class HerptofaunaDatabase : RoomDatabase() { // abstract is to make a blueprint class
 
     // Observation table
-    abstract fun checklistDao(): ChecklistDoa
-    abstract fun speciesDao(): SpeciesDoa
+    abstract fun checklistDao(): ChecklistDao
+    abstract fun speciesDao(): SpeciesDao
     abstract fun observationDao(): ObservationDao // Connects DAO interface to connect to room and the database
     companion object { // Creates global class (instead of local class)
         @Volatile // Makes sure INSTANCE is consistent
@@ -183,9 +178,9 @@ abstract class HerptofaunaDatabase : RoomDatabase() { // abstract is to make a b
 // Creates routes to each page for navController to follow
 sealed class HerptofaunaScreen(val route: String) {
     object HomePage : HerptofaunaScreen("home_page")
-    object ChecklistPage : HerptofaunaScreen("checklist_page")
+    object ChecklistPage : HerptofaunaScreen("checklist_page/{startTime}")
     object SpeciesPage : HerptofaunaScreen("species_page")
-    object SubmitPage : HerptofaunaScreen("submit_page")
+    object SubmitPage : HerptofaunaScreen("submit_page/{startTime}")
 }
 
 // Tells navController what do to at the end of each route (I guess???)
@@ -200,39 +195,79 @@ fun HerptofaunaNavigation() {
         composable(route = HerptofaunaScreen.HomePage.route) {
             HomePageLayout(navController = navController)
         }
-        composable(route = HerptofaunaScreen.ChecklistPage.route) {
-            ChecklistPageLayout(navController = navController)
+        composable(route = HerptofaunaScreen.ChecklistPage.route) { backStackEntry ->
+            val startTimeString = backStackEntry.arguments?.getString("startTime") ?: ""
+            ChecklistPageLayout(
+                navController = navController,
+                startTimeString = startTimeString
+            )
         }
         composable(route = HerptofaunaScreen.SpeciesPage.route) {
             SpeciesPageLayout(navController = navController)
         }
-        composable(route = HerptofaunaScreen.SubmitPage.route) {
-            SubmitPageLayout(navController = navController)
+        // Single SubmitPage route using the updated sealed class property:
+        composable(route = HerptofaunaScreen.SubmitPage.route) { backStackEntry ->
+            val startTimeString = backStackEntry.arguments?.getString("startTime") ?: ""
+
+            SubmitPageLayout(
+                navController = navController,
+                surveyStartTime = startTimeString
+            )
         }
     }
 }
 
-
-
-
-
 // Commits observation data
 
-fun commitObservation(observationDao: ObservationDao, location: String, dateTime: LocalDateTime, duration: Int) {
-    CoroutineScope(Dispatchers.IO).launch {
-        val newObservation = Observation(location = location, dateTime = dateTime, duration = duration)
-        observationDao.insertObservation(newObservation)
-    }
+suspend fun commitObservation(
+    observationDao: ObservationDao,
+    location: String,
+    dateTime: LocalDateTime,
+    duration: Int
+) {
+    val newObservation = Observation(
+        location = location,
+        dateTime = dateTime,
+        duration = duration
+    )
+
+    observationDao.insertObservation(newObservation)
 }
 
-fun commitChecklist(checklistDao: ChecklistDoa, count: Int, userComment: String, eventId: Int, speciesId: Int) {
+fun commitChecklist(checklistDao: ChecklistDao, count: Int, userComment: String, eventId: Int, speciesId: Int) {
     CoroutineScope(Dispatchers.IO).launch {
-        val newChecklist = Checklist(observationId = eventId, eventId = speciesId, speciesId = speciesId, count = count, userComment = userComment, image = "To be added later")// This has got to be a list will all the data in it
+        val newChecklist = Checklist(eventId = eventId, speciesId = speciesId, count = count, userComment = userComment, image = "To be added later")// This has got to be a list will all the data in it
         checklistDao.insertChecklistItems(newChecklist)
     }
 }
 
+class SpeciesViewModel(private val speciesDao: SpeciesDao) : ViewModel() {
 
+    // State for a single species name
+    private val _speciesName = MutableStateFlow<String?>("Loading...")
+    val speciesName: StateFlow<String?> = _speciesName
+
+    // State for the whole species list
+    private val _speciesList = MutableStateFlow<List<Species>>(emptyList())
+    val speciesList: StateFlow<List<Species>> = _speciesList
+
+    fun getSpeciesName(id: Int) {
+        viewModelScope.launch {
+            _speciesName.value = speciesDao.getSpeciesName(id)
+        }
+    }
+
+    fun getAllSpeciesInfo() {
+        viewModelScope.launch {
+            _speciesList.value = speciesDao.getAllSpecies()
+        }
+    }
+}
+
+fun calcDuration(startTime: LocalDateTime, endTime: LocalDateTime): Int {
+    val duration = Duration.between(startTime, endTime)
+    return duration.toMinutes().toInt()
+}
 
 // All layouts (4 pages)
 
@@ -244,14 +279,22 @@ fun HomePageLayout(navController : NavController, modifier: Modifier = Modifier)
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Button(onClick = {navController.navigate(HerptofaunaScreen.ChecklistPage.route)}) {
+        Button(
+            onClick = {
+            val startTime = LocalDateTime.now().toString()
+            navController.navigate("checklist_page/$startTime")
+            }) {
             Text("Start Survey")
         }
     }
 }
 
 @Composable
-fun ChecklistPageLayout(navController : NavController, modifier: Modifier = Modifier) {
+fun ChecklistPageLayout(
+    navController : NavController,
+    startTimeString: String,
+    modifier: Modifier = Modifier,
+) {
     var countMccannSkink by remember { mutableStateOf(0) }
 
     val context = LocalContext.current
@@ -264,11 +307,12 @@ fun ChecklistPageLayout(navController : NavController, modifier: Modifier = Modi
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Button(onClick = { navController.navigate(HerptofaunaScreen.SpeciesPage.route) }) {
+        Button(onClick = {
+            navController.navigate(HerptofaunaScreen.SpeciesPage.route) }) {
             Text("See Species")
         } // Goes to species page
         Button(onClick = {
-            navController.navigate(HerptofaunaScreen.SubmitPage.route)
+            navController.navigate("submit_page/$startTimeString")
         }) { // Commits data to Herptofauna Database
             Text("Stop Checklist")
         }
@@ -278,9 +322,9 @@ fun ChecklistPageLayout(navController : NavController, modifier: Modifier = Modi
     }
 }
 
-
 @Composable
 fun SpeciesPageLayout(navController: NavController, modifier: Modifier = Modifier) {
+
     Column(
         modifier = modifier
             .fillMaxSize(),
@@ -294,14 +338,60 @@ fun SpeciesPageLayout(navController: NavController, modifier: Modifier = Modifie
 }
 
 @Composable
-fun SubmitPageLayout(navController: NavController, modifier: Modifier = Modifier) {
+fun SubmitPageLayout(
+    navController: NavController,
+    modifier: Modifier = Modifier,
+    surveyStartTime: String
+) {
+    // Collects LocalDateTime
+    val context = LocalContext.current
+
+    // Get a coroutine scope tied to this Composable's lifecycle
+    val scope = rememberCoroutineScope()
+
+    // Accesses the database
+    val database = remember { HerptofaunaDatabase.getDatabase(context) }
+    val observationDao = database.observationDao()
+
+    var location by remember { mutableStateOf("") } // For collection of location
+
     Column(
         modifier = modifier
             .fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Button(onClick = {navController.navigate(HerptofaunaScreen.HomePage.route)}) {
+        TextField(
+            value = location,
+            onValueChange = { newText -> location = newText },
+            label = { Text("Entre location")}
+        )
+
+        Button(
+            onClick = {
+                val parsedStartTime = try {
+                    LocalDateTime.parse(surveyStartTime)
+                } catch (e: Exception) {
+                    LocalDateTime.now() // Fallback to regular time if parsing fails, will change latter
+                }
+
+                val endTime = LocalDateTime.now()
+                val duration = calcDuration(parsedStartTime, endTime)
+
+                scope.launch(Dispatchers.IO) {
+                    commitObservation(
+                        observationDao = observationDao,
+                        location = location,
+                        dateTime = parsedStartTime,
+                        duration = duration
+                    )
+                }
+
+                navController.navigate(HerptofaunaScreen.HomePage.route) {
+                    popUpTo(HerptofaunaScreen.HomePage.route) { inclusive = true }
+                }
+            }
+        ) {
             Text("Confirm & Submit")
         }
     }

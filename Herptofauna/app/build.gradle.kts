@@ -12,6 +12,10 @@ android {
     }
 
     defaultConfig {
+        minSdk = 26
+    }
+
+    defaultConfig {
         applicationId = "com.example.herptofauna"
         minSdk = 24
         targetSdk = 36
