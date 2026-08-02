@@ -48,6 +48,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.time.Duration
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
@@ -68,15 +69,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.modifier.modifierLocalConsumer
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.viewmodel.compose.viewModel
 
 class MainActivity : ComponentActivity() {
@@ -323,37 +330,106 @@ val speciesData = listOf(
 // Uses species data to make table
 @Composable
 fun SpeciesTable(speciesData: List<Species>) {
+    val speciesCounts = remember { mutableStateMapOf<Int, Int>() }
+
     Column(modifier = Modifier.padding(16.dp)) {
         HorizontalDivider()
         LazyColumn() {
             items(speciesData) { species ->
-                SpeciesRow(species = species)
+                val count = speciesCounts[species.speciesId] ?: 0
+
+                SpeciesRow(
+                    species = species,
+                    count = count,
+                    onIncrement = {
+                        speciesCounts[species.speciesId] = count + 1
+                    },
+                    onDecrement = {
+                        if (count > 0 ) {
+                            speciesCounts[species.speciesId] = count - 1
+                        }
+                    }
+                    )
                 HorizontalDivider()
             }
         }
     }
 }
 
+// Function making each row
 @Composable
-fun SpeciesRow(species: Species) {
+fun SpeciesRow(
+    species: Species,
+    count: Int,
+    onIncrement: () -> Unit,
+    onDecrement: () -> Unit
+    ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = species.englishName, modifier = Modifier.weight(1f)
+        Column(modifier = Modifier
+            .weight(1f)
+        ) {
+            Text(
+                text = "${species.englishName} (${species.scientificName})",
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+
+        SpeciesCounter(
+            count = count,
+            onIncrement = onIncrement,
+            onDecrement = onDecrement
         )
+    }
+
+}
+
+// Count section (seperated for simplicity)
+@Composable
+fun SpeciesCounter(
+    count: Int,
+    onIncrement: () -> Unit,
+    onDecrement: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        IconButton(
+            onClick = onDecrement,
+            enabled = count > 0,
+            modifier = Modifier.size(32.dp)
+        ) {
+            Text("-1")
+        }
         Text(
-            text = species.scientificName, modifier = Modifier.weight(1f)
+            text = "$count",
+            modifier = Modifier.padding(horizontal = 8.dp)
         )
+
+        IconButton(
+            onClick = onIncrement,
+            modifier = Modifier.size(32.dp)
+
+        ) {
+            Text("+1")
+        }
     }
 }
 
+// Using lazy column to make the table (more useful with viewModel latter)
 @Composable
 fun SpeciesScreen() {
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier
+            .fillMaxSize()
+    ) {
         SpeciesTable(speciesData = speciesData)
     }
 }
@@ -462,14 +538,13 @@ fun ChecklistPageLayout(
                 NavigationBarItem(
                     selected = true,
                     onClick = {navController.navigate("submit_page/$startTimeString") },
-                    icon = { Icon(Icons.Default.Home, contentDescription = "End Survey") },
+                    icon = { Icon(Icons.Default.Done, contentDescription = "End Survey") },
                     label = { Text("Stop Survey")
                     }
                 )
             }
         }
     ) { innerPadding ->
-        var countMccannSkink by remember { mutableStateOf(0) }
 
         val context = LocalContext.current
         val database = HerptofaunaDatabase.getDatabase(context)
