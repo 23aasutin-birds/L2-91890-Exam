@@ -11,7 +11,6 @@ import androidx.compose.ui.Modifier
 import com.example.herptofauna.ui.theme.HerptofaunaTheme
 import androidx.compose.material3.Button
 import androidx.compose.foundation.layout.Column
-import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Arrangement
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -23,6 +22,7 @@ import androidx.room.PrimaryKey
 import androidx.room.Insert
 import androidx.room.RoomDatabase
 import android.content.Context
+import android.widget.TableRow
 import androidx.room.Database
 import androidx.room.Room
 import kotlinx.coroutines.launch
@@ -41,11 +41,43 @@ import androidx.room.Index
 import androidx.compose.material3.TextField
 import java.time.LocalDateTime
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.res.painterResource
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.time.Duration
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.ModifierLocalBeyondBoundsLayout
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -269,55 +301,196 @@ fun calcDuration(startTime: LocalDateTime, endTime: LocalDateTime): Int {
     return duration.toMinutes().toInt()
 }
 
-// All layouts (4 pages)
+val speciesData = listOf(
+    Species( 0, "Oligosoma grande", "Grand Skink", ""),
+    Species( 1, "Oligosoma repens", "Eyres Skink", ""),
+    Species( 2, "Woodwirthia \"Cromwell\"", "Kawarau Gecko", ""),
+    Species( 3, "Woodworthia \"south-western\"", "Mountain Beech Gecko", ""),
+    Species( 4, "Oligosoma grande", "Grand Skink", ""),
+    Species( 5, "Oligosoma repens", "Eyres Skink", ""),
+    Species( 6, "Woodwirthia \"Cromwell\"", "Kawarau Gecko", ""),
+    Species( 7, "Woodworthia \"south-western\"", "Mountain Beech Gecko", ""),
+    Species( 8, "Oligosoma grande", "Grand Skink", ""),
+    Species( 9, "Oligosoma repens", "Eyres Skink", ""),
+    Species( 10, "Woodwirthia \"Cromwell\"", "Kawarau Gecko", ""),
+    Species( 11, "Woodworthia \"south-western\"", "Mountain Beech Gecko", ""),
+    Species( 12, "Oligosoma grande", "Grand Skink", ""),
+    Species( 13, "Oligosoma repens", "Eyres Skink", ""),
+    Species( 14, "Woodwirthia \"Cromwell\"", "Kawarau Gecko", ""),
 
+    )
+
+// Uses species data to make table
 @Composable
-fun HomePageLayout(navController : NavController, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            .fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Button(
-            onClick = {
-            val startTime = LocalDateTime.now().toString()
-            navController.navigate("checklist_page/$startTime")
-            }) {
-            Text("Start Survey")
+fun SpeciesTable(speciesData: List<Species>) {
+    Column(modifier = Modifier.padding(16.dp)) {
+        HorizontalDivider()
+        LazyColumn() {
+            items(speciesData) { species ->
+                SpeciesRow(species = species)
+                HorizontalDivider()
+            }
         }
     }
 }
 
+@Composable
+fun SpeciesRow(species: Species) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = species.englishName, modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = species.scientificName, modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+fun SpeciesScreen() {
+    Column(modifier = Modifier.fillMaxSize()) {
+        SpeciesTable(speciesData = speciesData)
+    }
+}
+
+// All layouts (4 pages)
+
+@Composable
+fun HomePageLayout(navController : NavController, modifier: Modifier = Modifier) {
+
+    val image = painterResource(R.drawable.unsplash_liazard_image)
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        // Herptofauna Title
+        Box(
+            modifier = Modifier.weight(1f),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "Herptofauna",
+                fontSize = 50.sp,
+                textAlign = TextAlign.Center
+            )
+        }
+
+        // Skink Image
+        Box(
+            modifier = Modifier.weight(1f),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = image,
+                contentDescription = "A lizard",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
+        // Start Survey Button
+        Box(
+            modifier = Modifier.weight(1f),
+            contentAlignment = Alignment.Center
+
+        ) {
+            Button(
+                onClick = {
+                    val startTime = LocalDateTime.now().toString()
+                    navController.navigate("checklist_page/$startTime")
+                },
+                modifier = Modifier.size(width = 250.dp, height = 75.dp)
+
+            ) {
+                Text(
+                    "Start Survey",
+                    fontSize = 25.sp
+                )
+            }
+        }
+
+        // Credits and Privacy
+        Box(
+            modifier = Modifier.weight(1f),
+            contentAlignment = Alignment.Center
+        ) {
+            Column (
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .offset(y = -30.dp)
+                    .padding(16.dp)
+            ) {
+                Text(
+                    "Thank you to the Lizard Guy for the feedback for this app. Image credits: Igor Kazantsev from Unsplash.",
+                    modifier = Modifier
+                )
+                Spacer(modifier = Modifier.height(30.dp))
+                Text(
+                    "Privacy Statement: you're personal data will not be recorded while using the app.",
+                    modifier = Modifier
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChecklistPageLayout(
     navController : NavController,
     startTimeString: String,
     modifier: Modifier = Modifier,
 ) {
-    var countMccannSkink by remember { mutableStateOf(0) }
-
-    val context = LocalContext.current
-    val database = HerptofaunaDatabase.getDatabase(context)
-    val observationDao = database.observationDao()
-
-    Column(
-        modifier = modifier
-            .fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Button(onClick = {
-            navController.navigate(HerptofaunaScreen.SpeciesPage.route) }) {
-            Text("See Species")
-        } // Goes to species page
-        Button(onClick = {
-            navController.navigate("submit_page/$startTimeString")
-        }) { // Commits data to Herptofauna Database
-            Text("Stop Checklist")
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Your Survery")},
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                )
+            )
+        },
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    selected = true,
+                    onClick = {navController.navigate("submit_page/$startTimeString") },
+                    icon = { Icon(Icons.Default.Home, contentDescription = "End Survey") },
+                    label = { Text("Stop Survey")
+                    }
+                )
+            }
         }
-        Button(onClick = { countMccannSkink++ }) {
-            Text("Add a Mccann's Skink. ($countMccannSkink)")
+    ) { innerPadding ->
+        var countMccannSkink by remember { mutableStateOf(0) }
+
+        val context = LocalContext.current
+        val database = HerptofaunaDatabase.getDatabase(context)
+        val observationDao = database.observationDao()
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Stuff here")
+            }
+
+            Box(modifier = Modifier.weight(1f)) {
+                Column(modifier = Modifier) {
+                    SpeciesScreen()
+                }
+            }
         }
     }
 }
