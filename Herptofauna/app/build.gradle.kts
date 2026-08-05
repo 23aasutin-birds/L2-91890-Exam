@@ -59,6 +59,7 @@ dependencies {
     implementation(libs.room.runtime)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation("androidx.room:room-ktx:2.6.1")
+    implementation("com.google.maps.android:maps-compose:6.12.0")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

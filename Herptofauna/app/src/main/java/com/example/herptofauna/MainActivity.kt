@@ -22,7 +22,6 @@ import androidx.room.PrimaryKey
 import androidx.room.Insert
 import androidx.room.RoomDatabase
 import android.content.Context
-import android.widget.TableRow
 import androidx.room.Database
 import androidx.room.Room
 import kotlinx.coroutines.launch
@@ -48,12 +47,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.time.Duration
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.Box
-import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -62,15 +59,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.layout.ModifierLocalBeyondBoundsLayout
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Done
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -80,11 +74,22 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.modifier.modifierLocalConsumer
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.foundation.layout.*
+/*
+import androidx.compose.material3.Text
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.LatLng
+import com.google.maps.android.compose.*
+import com.google.maps.android.ktx.model.cameraPosition
+
+ */
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -311,20 +316,19 @@ fun calcDuration(startTime: LocalDateTime, endTime: LocalDateTime): Int {
 val speciesData = listOf(
     Species( 0, "Oligosoma grande", "Grand Skink", ""),
     Species( 1, "Oligosoma repens", "Eyres Skink", ""),
-    Species( 2, "Woodwirthia \"Cromwell\"", "Kawarau Gecko", ""),
-    Species( 3, "Woodworthia \"south-western\"", "Mountain Beech Gecko", ""),
-    Species( 4, "Oligosoma grande", "Grand Skink", ""),
-    Species( 5, "Oligosoma repens", "Eyres Skink", ""),
-    Species( 6, "Woodwirthia \"Cromwell\"", "Kawarau Gecko", ""),
-    Species( 7, "Woodworthia \"south-western\"", "Mountain Beech Gecko", ""),
-    Species( 8, "Oligosoma grande", "Grand Skink", ""),
-    Species( 9, "Oligosoma repens", "Eyres Skink", ""),
-    Species( 10, "Woodwirthia \"Cromwell\"", "Kawarau Gecko", ""),
-    Species( 11, "Woodworthia \"south-western\"", "Mountain Beech Gecko", ""),
-    Species( 12, "Oligosoma grande", "Grand Skink", ""),
-    Species( 13, "Oligosoma repens", "Eyres Skink", ""),
-    Species( 14, "Woodwirthia \"Cromwell\"", "Kawarau Gecko", ""),
-
+    Species( 2, "Oligosoma inconspicuum", "Cyptic Skink", ""),
+    Species( 3, "Oligosoma judgei", "Barrier Skink", ""),
+    Species( 4, "Oligosoma maccanni", "McCann's Skink", ""),
+    Species( 5, "Oligosoma otagense", "Otago Skink", ""),
+    Species( 6, "Oligosoma polychroma", "New Zealand Grass Skink", ""),
+    Species( 7, "Oligosoma toka", "Nevis Skink", ""),
+    Species( 8, "Woodwirthia \"Cromwell\"", "Kawarau Gecko", ""),
+    Species( 9, "Woodworthia \"Central Otago\"", "Schist Gecko", ""),
+    Species( 10, "Woodworthia \"Otago/Southland large\"", "Korero Gecko", ""),
+    Species( 11, "Woodworthia \"southern alps\"", "Southern Alps Gecko", ""),
+    Species( 12, "Woodworthia \"southern mini\"", "Short-toed Gecko", ""),
+    Species( 13, "Woodworthia \"Raggedy Range\"", "Raggedy Range Gecko", ""),
+    Species( 14, "Woodworthia \"south-western\"", "Mountain Beech Gecko", ""),
     )
 
 // Uses species data to make table
@@ -437,7 +441,10 @@ fun SpeciesScreen() {
 // All layouts (4 pages)
 
 @Composable
-fun HomePageLayout(navController : NavController, modifier: Modifier = Modifier) {
+fun HomePageLayout(
+    navController : NavController,
+    modifier: Modifier = Modifier
+) {
 
     val image = painterResource(R.drawable.unsplash_liazard_image)
 
@@ -538,7 +545,9 @@ fun ChecklistPageLayout(
                 NavigationBarItem(
                     selected = true,
                     onClick = {navController.navigate("submit_page/$startTimeString") },
-                    icon = { Icon(Icons.Default.Done, contentDescription = "End Survey") },
+                    icon = { Icon(Icons.Default.Done,
+                            contentDescription = "End Survey",
+                        ) },
                     label = { Text("Stop Survey")
                     }
                 )
@@ -585,6 +594,7 @@ fun SpeciesPageLayout(navController: NavController, modifier: Modifier = Modifie
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SubmitPageLayout(
     navController: NavController,
@@ -603,44 +613,129 @@ fun SubmitPageLayout(
 
     var location by remember { mutableStateOf("") } // For collection of location
 
-    Column(
-        modifier = modifier
-            .fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        TextField(
-            value = location,
-            onValueChange = { newText -> location = newText },
-            label = { Text("Entre location")}
-        )
+    // Getting parsed start time
+    /*
+    val parsedStartTime = try {
+        LocalDateTime.parse(surveyStartTime)
+    } catch (e: Exception) {
+        LocalDateTime.now() // Fallback to regular time if parsing fails, will change latter
+    }
+    // Getting end time
+    val endTime = LocalDateTime.now()
+    */
 
-        Button(
-            onClick = {
-                val parsedStartTime = try {
-                    LocalDateTime.parse(surveyStartTime)
-                } catch (e: Exception) {
-                    LocalDateTime.now() // Fallback to regular time if parsing fails, will change latter
-                }
+    // Calculating duration
+    var duration by remember { mutableIntStateOf("") } // For collection of duration
 
-                val endTime = LocalDateTime.now()
-                val duration = calcDuration(parsedStartTime, endTime)
+    var dateTime by remember { mutableStateOf("") } // For collection of localDateTime
 
-                scope.launch(Dispatchers.IO) {
-                    commitObservation(
-                        observationDao = observationDao,
-                        location = location,
-                        dateTime = parsedStartTime,
-                        duration = duration
-                    )
-                }
+    // Google Maps
+    /*
+    var mapLocation by remember {mutableStateOf<LatLng>(null)}
 
-                navController.navigate(HerptofaunaScreen.HomePage.route) {
-                    popUpTo(HerptofaunaScreen.HomePage.route) { inclusive = true }
-                }
+    val defaultLocation = LatLng(-45.0312,-45.0312 )
+
+    val cameraPositionState = rememberCameraPositionState {
+        position = CameraPosition.fromLatLngZoom(defaultLocation, 10f)
+    }
+    */
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Add details")},
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                )
+            )
+        },
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    selected = true,
+                    onClick = {
+                        val parsedStartTime = try {
+                            LocalDateTime.parse(surveyStartTime)
+                        } catch (e: Exception) {
+                            LocalDateTime.now() // Fallback to regular time if parsing fails, will change latter
+                        }
+
+                        val endTime = LocalDateTime.now()
+                        val calcDuration = calcDuration(parsedStartTime, endTime)
+
+                        scope.launch(Dispatchers.IO) {
+                            commitObservation(
+                                observationDao = observationDao,
+                                location = location,
+                                dateTime = parsedStartTime,
+                                duration = calcDuration
+                            )
+                        }
+
+                        navController.navigate(HerptofaunaScreen.HomePage.route) {
+                            popUpTo(HerptofaunaScreen.HomePage.route) { inclusive = true }
+                        }
+                    },
+                    icon = { Icon(Icons.Default.Done,
+                        contentDescription = "Confirm",
+                    ) },
+                    label = { Text("Confirm")
+                    }
+                )
             }
+        }
+    ) { innerPadding ->
+
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Text("Confirm & Submit")
+            Box(
+                modifier = modifier.weight(1f)
+            ){
+                /*
+                GoogleMap(
+                    modifier = Modifier.fillMaxSize(),
+                    cameraPositionState = cameraPositionState,
+                    onMapClick = { latLng -> mapLocation = LagLng }
+                ) {
+                    mapLocation?.let { pinLocation ->
+                        Marker(
+                            state = rememberUpdatedMarkerState(position = pinLocation),
+                        )
+                    }
+                }
+                */
+            }
+
+            Column(
+                modifier = modifier
+                    .weight(1f)
+                    .fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceEvenly
+            ){
+                TextField(
+                    value = location,
+                    onValueChange = { newText -> location = newText },
+                    label = { Text("Entre location")}
+                )
+
+                TextField(
+                    value = dateTime,
+                    onValueChange = { newText -> dateTime = newText },
+                    label = { Text("Entre location")}
+                )
+
+                TextField(
+                    value = duration,
+                    onValueChange = { newText -> duration = newText },
+                    label = { Text("Entre location")},
+                )
+            }
         }
     }
 }
