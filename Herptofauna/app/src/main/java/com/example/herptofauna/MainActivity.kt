@@ -63,10 +63,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Done
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -74,22 +72,21 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.*
-/*
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Done
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.*
 import com.google.maps.android.ktx.model.cameraPosition
 
- */
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -545,7 +542,7 @@ fun ChecklistPageLayout(
                 NavigationBarItem(
                     selected = true,
                     onClick = {navController.navigate("submit_page/$startTimeString") },
-                    icon = { Icon(Icons.Default.Done,
+                    icon = { Icon(Icons.Filled.Done,
                             contentDescription = "End Survey",
                         ) },
                     label = { Text("Stop Survey")
@@ -614,7 +611,6 @@ fun SubmitPageLayout(
     var location by remember { mutableStateOf("") } // For collection of location
 
     // Getting parsed start time
-    /*
     val parsedStartTime = try {
         LocalDateTime.parse(surveyStartTime)
     } catch (e: Exception) {
@@ -622,23 +618,20 @@ fun SubmitPageLayout(
     }
     // Getting end time
     val endTime = LocalDateTime.now()
-    */
 
     // Calculating duration
-    var duration by remember { mutableIntStateOf("") } // For collection of duration
+    var duration by remember { mutableStateOf("") } // For collection of duration
 
     var dateTime by remember { mutableStateOf("") } // For collection of localDateTime
 
     // Google Maps
-    /*
-    var mapLocation by remember {mutableStateOf<LatLng>(null)}
+    var mapLocation by remember {mutableStateOf<LatLng?>(null)}
 
     val defaultLocation = LatLng(-45.0312,-45.0312 )
 
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(defaultLocation, 10f)
     }
-    */
 
     Scaffold(
         topBar = {
@@ -676,7 +669,7 @@ fun SubmitPageLayout(
                             popUpTo(HerptofaunaScreen.HomePage.route) { inclusive = true }
                         }
                     },
-                    icon = { Icon(Icons.Default.Done,
+                    icon = { Icon(Icons.Filled.Done,
                         contentDescription = "Confirm",
                     ) },
                     label = { Text("Confirm")
@@ -696,11 +689,10 @@ fun SubmitPageLayout(
             Box(
                 modifier = modifier.weight(1f)
             ){
-                /*
                 GoogleMap(
                     modifier = Modifier.fillMaxSize(),
                     cameraPositionState = cameraPositionState,
-                    onMapClick = { latLng -> mapLocation = LagLng }
+                    onMapClick = { latLng -> mapLocation = latLng }
                 ) {
                     mapLocation?.let { pinLocation ->
                         Marker(
@@ -708,7 +700,6 @@ fun SubmitPageLayout(
                         )
                     }
                 }
-                */
             }
 
             Column(
