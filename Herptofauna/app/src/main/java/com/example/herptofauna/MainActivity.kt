@@ -47,6 +47,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.time.Duration
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
@@ -75,12 +76,14 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
@@ -328,30 +331,112 @@ val speciesData = listOf(
     Species( 14, "Woodworthia \"south-western\"", "Mountain Beech Gecko", ""),
     )
 
+// Displays species in list
+@Composable
+fun SpeciesDisplayRow(
+    species: Species,
+    count: Int
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier
+            .weight(3f)
+        ) {
+            Text(
+                text = "${species.englishName} (${species.scientificName})",
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Column(modifier = Modifier
+            .weight(1f)
+        ) {
+            Text(
+                text = "${count}"
+            )
+        }
+
+    }
+
+}
+
 // Uses species data to make table
 @Composable
 fun SpeciesTable(speciesData: List<Species>) {
     val speciesCounts = remember { mutableStateMapOf<Int, Int>() }
+    Column(modifier = Modifier) {
 
-    Column(modifier = Modifier.padding(16.dp)) {
-        HorizontalDivider()
-        LazyColumn() {
-            items(speciesData) { species ->
-                val count = speciesCounts[species.speciesId] ?: 0
+        // Upper Half
+        Column(
+            modifier = Modifier
+                .padding(16.dp)
+                .weight(1f)
+        ) {
+            if (speciesCounts.isEmpty()) {
+                // If empty
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .border(1.dp, Color.Gray, RoundedCornerShape(8.dp))
+                ) {
+                    Text(
+                        text = "No species selected yet! Add individuals using counters bellow to create your list",
+                        modifier = Modifier.padding(16.dp)
 
-                SpeciesRow(
-                    species = species,
-                    count = count,
-                    onIncrement = {
-                        speciesCounts[species.speciesId] = count + 1
-                    },
-                    onDecrement = {
-                        if (count > 0 ) {
-                            speciesCounts[species.speciesId] = count - 1
+                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .border(1.dp, Color.Gray, RoundedCornerShape(8.dp))
+                        .padding(8.dp)
+                ) {
+                    items(speciesCounts.toList()) { (speciesId, count) ->
+                        val species = speciesData.find { it.speciesId == speciesId }
+                        if (species != null) {
+                            SpeciesDisplayRow(
+                                species = species,
+                                count = count
+                            )
+                            HorizontalDivider()
                         }
                     }
+                }
+            }
+        }
+
+        // Lower Half
+        Column(
+            modifier = Modifier
+                .padding(16.dp)
+                .weight(1f)
+        ) {
+            HorizontalDivider()
+            LazyColumn {
+                items(speciesData) { species ->
+                    val count = speciesCounts[species.speciesId] ?: 0
+
+                    SpeciesRow(
+                        species = species,
+                        count = count,
+                        onIncrement = {
+                            speciesCounts[species.speciesId] = count + 1
+                        },
+                        onDecrement = {
+                            if (count <=1) {
+                                speciesCounts.remove(species.speciesId)
+                            } else {
+                                speciesCounts[species.speciesId] = count - 1
+                            }
+                        }
                     )
-                HorizontalDivider()
+                    HorizontalDivider()
+                }
             }
         }
     }
@@ -563,14 +648,8 @@ fun ChecklistPageLayout(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Stuff here")
-            }
-
-            Box(modifier = Modifier.weight(1f)) {
-                Column(modifier = Modifier) {
-                    SpeciesScreen()
-                }
+            Column(modifier = Modifier) {
+                SpeciesScreen()
             }
         }
     }
@@ -625,9 +704,9 @@ fun SubmitPageLayout(
     var dateTime by remember { mutableStateOf("") } // For collection of localDateTime
 
     // Google Maps
-    var mapLocation by remember {mutableStateOf<LatLng?>(null)}
+    var mapLocation by remember { mutableStateOf<LatLng?>(null) }
 
-    val defaultLocation = LatLng(-45.0312,-45.0312 )
+    val defaultLocation = LatLng(-45.0312, -45.0312)
 
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(defaultLocation, 10f)
@@ -636,7 +715,7 @@ fun SubmitPageLayout(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Add details")},
+                title = { Text("Add details") },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
                 )
@@ -669,10 +748,14 @@ fun SubmitPageLayout(
                             popUpTo(HerptofaunaScreen.HomePage.route) { inclusive = true }
                         }
                     },
-                    icon = { Icon(Icons.Filled.Done,
-                        contentDescription = "Confirm",
-                    ) },
-                    label = { Text("Confirm")
+                    icon = {
+                        Icon(
+                            Icons.Filled.Done,
+                            contentDescription = "Confirm",
+                        )
+                    },
+                    label = {
+                        Text("Confirm")
                     }
                 )
             }
@@ -688,7 +771,7 @@ fun SubmitPageLayout(
         ) {
             Box(
                 modifier = modifier.weight(1f)
-            ){
+            ) {
                 GoogleMap(
                     modifier = Modifier.fillMaxSize(),
                     cameraPositionState = cameraPositionState,
@@ -708,23 +791,23 @@ fun SubmitPageLayout(
                     .fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.SpaceEvenly
-            ){
+            ) {
                 TextField(
                     value = location,
                     onValueChange = { newText -> location = newText },
-                    label = { Text("Entre location")}
+                    label = { Text("Entre location") }
                 )
 
                 TextField(
                     value = dateTime,
                     onValueChange = { newText -> dateTime = newText },
-                    label = { Text("Entre location")}
+                    label = { Text("Entre date and time") }
                 )
 
                 TextField(
                     value = duration,
                     onValueChange = { newText -> duration = newText },
-                    label = { Text("Entre location")},
+                    label = { Text("Entre duration counting (minutes)") },
                 )
             }
         }
