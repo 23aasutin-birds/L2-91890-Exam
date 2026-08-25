@@ -81,7 +81,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Done
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -89,6 +91,8 @@ import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.*
 import com.google.maps.android.ktx.model.cameraPosition
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 
 class MainActivity : ComponentActivity() {
@@ -687,8 +691,6 @@ fun SubmitPageLayout(
     val database = remember { HerptofaunaDatabase.getDatabase(context) }
     val observationDao = database.observationDao()
 
-    var location by remember { mutableStateOf("") } // For collection of location
-
     // Getting parsed start time
     val parsedStartTime = try {
         LocalDateTime.parse(surveyStartTime)
@@ -697,20 +699,49 @@ fun SubmitPageLayout(
     }
     // Getting end time
     val endTime = LocalDateTime.now()
-
     // Calculating duration
     var duration by remember { mutableStateOf("") } // For collection of duration
+    LaunchedEffect(surveyStartTime) {
+        val parsedStartTime = try {
+            LocalDateTime.parse(surveyStartTime)
+        } catch (e: Exception) {
+            LocalDateTime.now()
+        }
+        duration = calcDuration(parsedStartTime, endTime).toString()
+    }
 
-    var dateTime by remember { mutableStateOf("") } // For collection of localDateTime
+    // Coverts dateTime to readable format
+    val initialDateTimeText = remember (surveyStartTime) {
+        try {
+            val parsed = LocalDateTime.parse(surveyStartTime)
+            parsed.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+        } catch (e: Exception) {
+            surveyStartTime
+        }
+    }
+    var dateTime by remember { mutableStateOf(initialDateTimeText) } // For collection of localDateTime
 
     // Google Maps
     var mapLocation by remember { mutableStateOf<LatLng?>(null) }
-
+    var location by remember { mutableStateOf("") } // For collection of location
     val defaultLocation = LatLng(-45.0312, -45.0312)
-
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(defaultLocation, 10f)
     }
+
+    // Validation rules
+    val isDurationValid = duration.toIntOrNull() != null && duration.toInt() >= 0
+    val isDateTimeValid = try {
+        val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+        LocalDateTime.parse(dateTime, formatter)
+        true
+    } catch (e: Exception) {
+        false
+    }
+    val isLocationValid = location.isNotBlank()
+
+    // Overall Completion
+    val isFormValid = isDurationValid && isDateTimeValid && isLocationValid
 
     Scaffold(
         topBar = {
@@ -725,22 +756,25 @@ fun SubmitPageLayout(
             NavigationBar {
                 NavigationBarItem(
                     selected = true,
+                    enabled = isFormValid,
                     onClick = {
-                        val parsedStartTime = try {
-                            LocalDateTime.parse(surveyStartTime)
+                        // Parse the dateTime back to LocalDateTime
+
+                        val finalDateTime = try {
+                            val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+                            LocalDateTime.parse(dateTime, formatter)
                         } catch (e: Exception) {
-                            LocalDateTime.now() // Fallback to regular time if parsing fails, will change latter
+                            parsedStartTime
                         }
 
-                        val endTime = LocalDateTime.now()
-                        val calcDuration = calcDuration(parsedStartTime, endTime)
+                        val durationInt = duration.toIntOrNull() ?: 0
 
                         scope.launch(Dispatchers.IO) {
                             commitObservation(
                                 observationDao = observationDao,
                                 location = location,
-                                dateTime = parsedStartTime,
-                                duration = calcDuration
+                                dateTime = finalDateTime,
+                                duration = durationInt
                             )
                         }
 
@@ -801,13 +835,13 @@ fun SubmitPageLayout(
                 TextField(
                     value = dateTime,
                     onValueChange = { newText -> dateTime = newText },
-                    label = { Text("Entre date and time") }
+                    label = { Text("Entre date and time (yyyy-MM-dd HH:mm)") }
                 )
 
                 TextField(
                     value = duration,
-                    onValueChange = { newText -> duration = newText },
-                    label = { Text("Entre duration counting (minutes)") },
+                    onValueChange = { newValue -> duration = newValue.filter { it.isDigit() } },
+                    label = { Text("Entre duration of count (minutes)") },
                 )
             }
         }
