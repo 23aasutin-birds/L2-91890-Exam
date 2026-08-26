@@ -87,10 +87,16 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.core.os.bundleOf
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.room.OnConflictStrategy
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.*
 import com.google.maps.android.ktx.model.cameraPosition
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -168,14 +174,14 @@ data class Checklist(
 
 @Dao
 interface ChecklistDao {
-    @Insert
+    @Insert (onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertChecklistItems(checklist: Checklist)
 }
 
 // Species table
 @Entity (tableName = "species_data")
 data class Species(
-    @PrimaryKey (autoGenerate = true)
+    @PrimaryKey (autoGenerate = false)
     val speciesId: Int,
     val scientificName: String,
     val englishName: String,
@@ -184,6 +190,9 @@ data class Species(
 
 @Dao
 interface SpeciesDao {
+    @Insert (onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSpecies(species: Species)
+
     @Query("SELECT * FROM species_data")
     suspend fun getAllSpecies(): List<Species>
 
@@ -215,7 +224,20 @@ abstract class HerptofaunaDatabase : RoomDatabase() { // abstract is to make a b
                     context.applicationContext,
                     HerptofaunaDatabase::class.java, // Tells which class room will use
                     "herptofauna_database"
-                ).build()
+                )
+                    .addCallback(object : RoomDatabase.Callback() {
+                        override fun onCreate(db: SupportSQLiteDatabase) {
+                            super.onCreate(db)
+                            CoroutineScope(Dispatchers.IO).launch {
+                                val speciesDao = getDatabase(context).speciesDao()
+                                speciesData.forEach { species ->
+                                    speciesDao.insertSpecies(species)
+                                }
+                            }
+                        }
+                    })
+
+                .build()
                 INSTANCE = instance // Saves database as global variable
                 instance // Return instance
             }
@@ -235,31 +257,41 @@ sealed class HerptofaunaScreen(val route: String) {
 @Composable
 fun HerptofaunaNavigation() {
     val navController = rememberNavController()
+    val surveyViewModel: SurveyViewModel = viewModel()
 
     NavHost(
         navController = navController,
         startDestination = HerptofaunaScreen.HomePage.route
     ) {
         composable(route = HerptofaunaScreen.HomePage.route) {
-            HomePageLayout(navController = navController)
+            HomePageLayout(
+                navController = navController,
+                onStartSurvey = { startTime ->
+                    surveyViewModel.startSurvey(startTime)
+                    navController.navigate("checklist_page/$startTime")
+                }
+            )
         }
         composable(route = HerptofaunaScreen.ChecklistPage.route) { backStackEntry ->
             val startTimeString = backStackEntry.arguments?.getString("startTime") ?: ""
             ChecklistPageLayout(
                 navController = navController,
-                startTimeString = startTimeString
+                startTimeString = startTimeString,
+                viewModel = surveyViewModel
             )
         }
         composable(route = HerptofaunaScreen.SpeciesPage.route) {
             SpeciesPageLayout(navController = navController)
         }
+
         // Single SubmitPage route using the updated sealed class property:
         composable(route = HerptofaunaScreen.SubmitPage.route) { backStackEntry ->
             val startTimeString = backStackEntry.arguments?.getString("startTime") ?: ""
 
             SubmitPageLayout(
                 navController = navController,
-                surveyStartTime = startTimeString
+                surveyStartTime = startTimeString,
+                viewModel = surveyViewModel
             )
         }
     }
@@ -282,10 +314,50 @@ suspend fun commitObservation(
     observationDao.insertObservation(newObservation)
 }
 
-fun commitChecklist(checklistDao: ChecklistDao, count: Int, userComment: String, eventId: Int, speciesId: Int) {
-    CoroutineScope(Dispatchers.IO).launch {
-        val newChecklist = Checklist(eventId = eventId, speciesId = speciesId, count = count, userComment = userComment, image = "To be added later")// This has got to be a list will all the data in it
-        checklistDao.insertChecklistItems(newChecklist)
+suspend fun commitChecklist(
+    checklistDao: ChecklistDao,
+    count: Int,
+    userComment: String,
+    eventId: Int,
+    speciesId: Int
+) {
+    val newChecklist = Checklist(
+        eventId = eventId,
+        speciesId = speciesId,
+        count = count,
+        userComment = "",
+        image = "") // This has got to be a list will all the data in it
+    checklistDao.insertChecklistItems(newChecklist)
+    }
+
+class SurveyViewModel : ViewModel() {
+    var surveyStartTime: String = ""
+        private set
+
+    private val _speciesCounts = MutableStateFlow<Map<Int, Int>>(emptyMap())
+    val speciesCounts: StateFlow<Map<Int, Int>> = _speciesCounts.asStateFlow()
+
+    fun startSurvey(time: String) {
+        surveyStartTime = time
+        _speciesCounts.value = emptyMap()
+    }
+
+    fun incrementSpecies(speciesId: Int) {
+        _speciesCounts.update { currentMap ->
+            val count = currentMap[speciesId] ?: 0
+            currentMap + (speciesId to count + 1)
+        }
+    }
+
+    fun decrementSpecies(speciesId: Int) {
+        _speciesCounts.update { currentMap ->
+            val count = currentMap[speciesId] ?: 0
+            if (count <= 1) {
+                currentMap - speciesId
+            } else {
+                currentMap + (speciesId to count - 1)
+            }
+        }
     }
 }
 
@@ -370,8 +442,12 @@ fun SpeciesDisplayRow(
 
 // Uses species data to make table
 @Composable
-fun SpeciesTable(speciesData: List<Species>) {
-    val speciesCounts = remember { mutableStateMapOf<Int, Int>() }
+fun SpeciesTable(
+    speciesData: List<Species>,
+    viewModel: SurveyViewModel
+) {
+    val speciesCounts by viewModel.speciesCounts.collectAsState()
+
     Column(modifier = Modifier) {
 
         // Upper Half
@@ -428,16 +504,8 @@ fun SpeciesTable(speciesData: List<Species>) {
                     SpeciesRow(
                         species = species,
                         count = count,
-                        onIncrement = {
-                            speciesCounts[species.speciesId] = count + 1
-                        },
-                        onDecrement = {
-                            if (count <=1) {
-                                speciesCounts.remove(species.speciesId)
-                            } else {
-                                speciesCounts[species.speciesId] = count - 1
-                            }
-                        }
+                        onIncrement = { viewModel.incrementSpecies(species.speciesId) },
+                        onDecrement = { viewModel.decrementSpecies(species.speciesId) }
                     )
                     HorizontalDivider()
                 }
@@ -516,11 +584,17 @@ fun SpeciesCounter(
 
 // Using lazy column to make the table (more useful with viewModel latter)
 @Composable
-fun SpeciesScreen() {
+fun SpeciesScreen(
+    speciesData: List<Species>,
+    viewModel: SurveyViewModel
+) {
     Column(modifier = Modifier
             .fillMaxSize()
     ) {
-        SpeciesTable(speciesData = speciesData)
+        SpeciesTable(
+            speciesData = speciesData,
+            viewModel = viewModel
+        )
     }
 }
 
@@ -529,6 +603,7 @@ fun SpeciesScreen() {
 @Composable
 fun HomePageLayout(
     navController : NavController,
+    onStartSurvey: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
 
@@ -573,7 +648,7 @@ fun HomePageLayout(
             Button(
                 onClick = {
                     val startTime = LocalDateTime.now().toString()
-                    navController.navigate("checklist_page/$startTime")
+                    onStartSurvey(startTime)
                 },
                 modifier = Modifier.size(width = 250.dp, height = 75.dp)
 
@@ -615,6 +690,7 @@ fun HomePageLayout(
 fun ChecklistPageLayout(
     navController : NavController,
     startTimeString: String,
+    viewModel: SurveyViewModel,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -642,7 +718,7 @@ fun ChecklistPageLayout(
     ) { innerPadding ->
 
         val context = LocalContext.current
-        val database = HerptofaunaDatabase.getDatabase(context)
+        val database = remember { HerptofaunaDatabase.getDatabase(context) }
         val observationDao = database.observationDao()
 
         Column(
@@ -653,14 +729,19 @@ fun ChecklistPageLayout(
             verticalArrangement = Arrangement.Center
         ) {
             Column(modifier = Modifier) {
-                SpeciesScreen()
+                SpeciesScreen(
+                    speciesData = speciesData,
+                    viewModel = viewModel
+                )
             }
         }
     }
 }
 
 @Composable
-fun SpeciesPageLayout(navController: NavController, modifier: Modifier = Modifier) {
+fun SpeciesPageLayout(
+    navController: NavController,
+    modifier: Modifier = Modifier) {
 
     Column(
         modifier = modifier
@@ -678,9 +759,13 @@ fun SpeciesPageLayout(navController: NavController, modifier: Modifier = Modifie
 @Composable
 fun SubmitPageLayout(
     navController: NavController,
-    modifier: Modifier = Modifier,
-    surveyStartTime: String
+    surveyStartTime: String,
+    viewModel: SurveyViewModel,
+    modifier: Modifier = Modifier
 ) {
+    // Collects species counts from view model
+    val speciesCounts by viewModel.speciesCounts.collectAsState()
+
     // Collects LocalDateTime
     val context = LocalContext.current
 
@@ -724,7 +809,7 @@ fun SubmitPageLayout(
     // Google Maps
     var mapLocation by remember { mutableStateOf<LatLng?>(null) }
     var location by remember { mutableStateOf("") } // For collection of location
-    val defaultLocation = LatLng(-45.0312, -45.0312)
+    val defaultLocation = LatLng(-45.0312, 168.6626)
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(defaultLocation, 10f)
     }
@@ -770,16 +855,33 @@ fun SubmitPageLayout(
                         val durationInt = duration.toIntOrNull() ?: 0
 
                         scope.launch(Dispatchers.IO) {
-                            commitObservation(
-                                observationDao = observationDao,
-                                location = location,
-                                dateTime = finalDateTime,
-                                duration = durationInt
-                            )
-                        }
+                            val currentEventId = observationDao.insertObservation(
+                                Observation(
+                                    location = location,
+                                    dateTime = finalDateTime,
+                                    duration = durationInt
+                                )
+                            ).toInt()
 
-                        navController.navigate(HerptofaunaScreen.HomePage.route) {
-                            popUpTo(HerptofaunaScreen.HomePage.route) { inclusive = true }
+                            if(currentEventId > 0) {
+                                val checklistDao = database.checklistDao()
+                                speciesCounts.forEach { (speciesId, count) ->
+                                    commitChecklist(
+                                        checklistDao = checklistDao,
+                                        count = count,
+                                        userComment = "",
+                                        eventId = currentEventId,
+                                        speciesId = speciesId,
+
+                                        )
+                                }
+                            }
+
+                            kotlinx.coroutines.withContext(Dispatchers.Main) {
+                                navController.navigate(HerptofaunaScreen.HomePage.route) {
+                                    popUpTo(0) { inclusive = true }
+                                }
+                            }
                         }
                     },
                     icon = {
