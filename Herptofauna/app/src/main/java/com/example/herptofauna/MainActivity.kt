@@ -48,6 +48,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import java.time.Duration
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
@@ -80,10 +82,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -97,7 +106,9 @@ import com.google.maps.android.compose.*
 import com.google.maps.android.ktx.model.cameraPosition
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 
@@ -464,7 +475,7 @@ fun SpeciesTable(
                         .border(1.dp, Color.Gray, RoundedCornerShape(8.dp))
                 ) {
                     Text(
-                        text = "No species selected yet! Add individuals using counters bellow to create your list",
+                        text = "No species selected yet! Add individuals using counters bellow to create your list.",
                         modifier = Modifier.padding(16.dp)
 
                     )
@@ -677,7 +688,7 @@ fun HomePageLayout(
                 )
                 Spacer(modifier = Modifier.height(30.dp))
                 Text(
-                    "Privacy Statement: you're personal data will not be recorded while using the app.",
+                    "Privacy Statement: your location will be collected while using the app but will only be viewed by certified administrators and researchers.",
                     modifier = Modifier
                 )
             }
@@ -694,9 +705,10 @@ fun ChecklistPageLayout(
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
+        modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { Text("Your Survery")},
+                title = { Text("Your Survey")},
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
                 )
@@ -795,16 +807,14 @@ fun SubmitPageLayout(
         duration = calcDuration(parsedStartTime, endTime).toString()
     }
 
-    // Coverts dateTime to readable format
-    val initialDateTimeText = remember (surveyStartTime) {
-        try {
-            val parsed = LocalDateTime.parse(surveyStartTime)
-            parsed.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
-        } catch (e: Exception) {
-            surveyStartTime
-        }
+    // Date Time picker
+    var showDatePicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
+
+    var selectedDateTime by remember { mutableStateOf(parsedStartTime) }
+    val formattedDateTime = remember(selectedDateTime) {
+        selectedDateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
     }
-    var dateTime by remember { mutableStateOf(initialDateTimeText) } // For collection of localDateTime
 
     // Google Maps
     var mapLocation by remember { mutableStateOf<LatLng?>(null) }
@@ -816,17 +826,10 @@ fun SubmitPageLayout(
 
     // Validation rules
     val isDurationValid = duration.toIntOrNull() != null && duration.toInt() >= 0
-    val isDateTimeValid = try {
-        val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
-        LocalDateTime.parse(dateTime, formatter)
-        true
-    } catch (e: Exception) {
-        false
-    }
     val isLocationValid = location.isNotBlank()
 
     // Overall Completion
-    val isFormValid = isDurationValid && isDateTimeValid && isLocationValid
+    val isFormValid = isDurationValid && isLocationValid
 
     Scaffold(
         topBar = {
@@ -843,14 +846,6 @@ fun SubmitPageLayout(
                     selected = true,
                     enabled = isFormValid,
                     onClick = {
-                        // Parse the dateTime back to LocalDateTime
-
-                        val finalDateTime = try {
-                            val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
-                            LocalDateTime.parse(dateTime, formatter)
-                        } catch (e: Exception) {
-                            parsedStartTime
-                        }
 
                         val durationInt = duration.toIntOrNull() ?: 0
 
@@ -858,7 +853,7 @@ fun SubmitPageLayout(
                             val currentEventId = observationDao.insertObservation(
                                 Observation(
                                     location = location,
-                                    dateTime = finalDateTime,
+                                    dateTime = selectedDateTime,
                                     duration = durationInt
                                 )
                             ).toInt()
@@ -905,8 +900,9 @@ fun SubmitPageLayout(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
+            // Google Maps
             Box(
-                modifier = modifier.weight(1f)
+                modifier = Modifier.weight(1f)
             ) {
                 GoogleMap(
                     modifier = Modifier.fillMaxSize(),
@@ -922,30 +918,125 @@ fun SubmitPageLayout(
             }
 
             Column(
-                modifier = modifier
+                modifier = Modifier
                     .weight(1f)
                     .fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.SpaceEvenly
             ) {
-                TextField(
+                // Location Textbox
+                OutlinedTextField(
                     value = location,
                     onValueChange = { newText -> location = newText },
-                    label = { Text("Entre location") }
+                    label = { Text("Select location") }
                 )
 
-                TextField(
-                    value = dateTime,
-                    onValueChange = { newText -> dateTime = newText },
-                    label = { Text("Entre date and time (yyyy-MM-dd HH:mm)") }
-                )
+                // Date/Time
+                Box(
+                    modifier = Modifier
+                ) {
+                    OutlinedTextField(
+                        value = formattedDateTime,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Select date & time (yyyy-MM-dd HH:mm)") },
+                        trailingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.DateRange,
+                                contentDescription = "Select date & time"
+                            )
+                        },
+                    )
 
-                TextField(
+                    // Pop-up Calendar
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                showDatePicker = true
+                            }
+                    )
+                }
+
+                // Duration
+                OutlinedTextField(
                     value = duration,
                     onValueChange = { newValue -> duration = newValue.filter { it.isDigit() } },
-                    label = { Text("Entre duration of count (minutes)") },
+                    label = { Text("Ente5 duration of count (minutes)") },
                 )
             }
         }
     }
+
+    // Date picker stuff
+    if(showDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = selectedDateTime
+                .atZone(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli()
+        )
+
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        val selectedLocalDate = Instant.ofEpochMilli(millis)
+                            .atZone(ZoneId.of("UTC"))
+                            .toLocalDate()
+                        selectedDateTime = selectedDateTime
+                            .withYear(selectedLocalDate.year)
+                            .withMonth(selectedLocalDate.monthValue)
+                            .withDayOfMonth(selectedLocalDate.dayOfMonth)
+                    }
+                    showDatePicker = false
+                    showTimePicker = true
+                }) {
+                    Text("Ok")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text("Cancel")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    // Time picker stuff
+    if(showTimePicker) {
+        val timePickerState = rememberTimePickerState(
+            initialHour = selectedDateTime.hour,
+            initialMinute = selectedDateTime.minute,
+            is24Hour = true
+
+        )
+
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    selectedDateTime = selectedDateTime
+                        .withHour(timePickerState.hour)
+                        .withMinute(timePickerState.minute)
+                    showTimePicker = false
+                }) { Text("Ok") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTimePicker = false }) {
+                    Text("Cancel")
+                }
+            },
+            text = {
+                TimePicker(state = timePickerState)
+            }
+        )
+    }
+
 }
