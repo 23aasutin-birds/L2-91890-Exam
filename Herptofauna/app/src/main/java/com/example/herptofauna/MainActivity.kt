@@ -88,6 +88,11 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SelectableDates
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
@@ -102,6 +107,7 @@ import androidx.room.OnConflictStrategy
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
 import com.google.maps.android.compose.*
 import com.google.maps.android.ktx.model.cameraPosition
 import kotlinx.coroutines.flow.asStateFlow
@@ -239,16 +245,14 @@ abstract class HerptofaunaDatabase : RoomDatabase() { // abstract is to make a b
                     .addCallback(object : RoomDatabase.Callback() {
                         override fun onCreate(db: SupportSQLiteDatabase) {
                             super.onCreate(db)
-                            CoroutineScope(Dispatchers.IO).launch {
-                                val speciesDao = getDatabase(context).speciesDao()
-                                speciesData.forEach { species ->
-                                    speciesDao.insertSpecies(species)
-                                }
+                            speciesData.forEach { species ->
+                                db.execSQL(
+                                    "INSERT INTO species_data (speciesId, scientificName, englishName, speciesComment) VALUES (${species.speciesId}, '${species.scientificName}', '${species.englishName.replace("'", "''")}', '${species.speciesComment}'"
+                                )
                             }
                         }
                     })
-
-                .build()
+                    .build()
                 INSTANCE = instance // Saves database as global variable
                 instance // Return instance
             }
@@ -704,6 +708,11 @@ fun ChecklistPageLayout(
     viewModel: SurveyViewModel,
     modifier: Modifier = Modifier,
 ) {
+    val speciesCounts by viewModel.speciesCounts.collectAsState()
+
+    var showWarningDialog by remember { mutableStateOf(false) }
+    var warningDialogMessage by remember { mutableStateOf("") }
+
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -718,7 +727,26 @@ fun ChecklistPageLayout(
             NavigationBar {
                 NavigationBarItem(
                     selected = true,
-                    onClick = {navController.navigate("submit_page/$startTimeString") },
+                    onClick = {
+                        val totalIndividuals = speciesCounts.values.sum()
+                        val hasHighCount = speciesCounts.values.any { count ->
+                            count > 10
+                        }
+
+                        when {
+                            totalIndividuals == 0 -> {
+                                warningDialogMessage = "You have recorded 0 species. Are you sure you want to submit this survey?"
+                                showWarningDialog = true
+                            }
+                            hasHighCount -> {
+                                warningDialogMessage = "You have record more than 10 individuals from a single species. Is this count accurate?"
+                                showWarningDialog = true
+                            }
+                            else -> {
+                                navController.navigate("submit_page/$startTimeString")
+                            }
+                        }
+                              },
                     icon = { Icon(Icons.Filled.Done,
                             contentDescription = "End Survey",
                         ) },
@@ -748,6 +776,38 @@ fun ChecklistPageLayout(
             }
         }
     }
+    if (showWarningDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showWarningDialog = false
+            },
+            title = {
+                Text("Verify Survey Details")
+            },
+            text = {
+                Text(warningDialogMessage)
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showWarningDialog = false
+                        navController.navigate("submit_page/$startTimeString")
+                    }
+                ) {
+                    Text("Continue")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showWarningDialog = false
+                    }
+                ) {
+                    Text("Back")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -775,14 +835,15 @@ fun SubmitPageLayout(
     viewModel: SurveyViewModel,
     modifier: Modifier = Modifier
 ) {
+    // The one, the only snackbarHostState :)
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
     // Collects species counts from view model
     val speciesCounts by viewModel.speciesCounts.collectAsState()
 
     // Collects LocalDateTime
     val context = LocalContext.current
-
-    // Get a coroutine scope tied to this Composable's lifecycle
-    val scope = rememberCoroutineScope()
 
     // Accesses the database
     val database = remember { HerptofaunaDatabase.getDatabase(context) }
@@ -817,21 +878,38 @@ fun SubmitPageLayout(
     }
 
     // Google Maps
-    var mapLocation by remember { mutableStateOf<LatLng?>(null) }
-    var location by remember { mutableStateOf("") } // For collection of location
+    var latLagLocation by remember { mutableStateOf<LatLng?>(null) }
+    var textLocation by remember { mutableStateOf("") } // For collection of location
     val defaultLocation = LatLng(-45.0312, 168.6626)
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(defaultLocation, 10f)
     }
+    val qldcBoundaries = remember {
+        LatLngBounds(
+            LatLng(-45.50, 168.10),
+            LatLng(-44.00, 170.10)
+        )
+    }
+    val mapBoundaries by remember {
+        mutableStateOf(
+            MapProperties(
+                latLngBoundsForCameraTarget = qldcBoundaries,
+                minZoomPreference = 8f
+            )
+        )
+    }
 
     // Validation rules
-    val isDurationValid = duration.toIntOrNull() != null && duration.toInt() >= 0
-    val isLocationValid = location.isNotBlank()
+    val isDurationInvalid = duration.toIntOrNull() == null
+    val isLocationInvalid = textLocation.isBlank()
 
     // Overall Completion
-    val isFormValid = isDurationValid && isLocationValid
+    val isFormValid = isDurationInvalid && isLocationInvalid
 
     Scaffold(
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState)
+                       },
         topBar = {
             TopAppBar(
                 title = { Text("Add details") },
@@ -844,15 +922,35 @@ fun SubmitPageLayout(
             NavigationBar {
                 NavigationBarItem(
                     selected = true,
-                    enabled = isFormValid,
+                    enabled = true,
                     onClick = {
+                        
+                        if (isDurationInvalid) {
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    message = "Enter a survey duration to continue.",
+                                    duration = SnackbarDuration.Short
+                                )
+                            }
+                            return@NavigationBarItem
+                        }
+
+                        if (isLocationInvalid) {
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    message = "Zoom in on map and select a location to continue.",
+                                    duration = SnackbarDuration.Short
+                                )
+                            }
+                            return@NavigationBarItem
+                        }
 
                         val durationInt = duration.toIntOrNull() ?: 0
 
                         scope.launch(Dispatchers.IO) {
                             val currentEventId = observationDao.insertObservation(
                                 Observation(
-                                    location = location,
+                                    location = textLocation,
                                     dateTime = selectedDateTime,
                                     duration = durationInt
                                 )
@@ -907,9 +1005,13 @@ fun SubmitPageLayout(
                 GoogleMap(
                     modifier = Modifier.fillMaxSize(),
                     cameraPositionState = cameraPositionState,
-                    onMapClick = { latLng -> mapLocation = latLng }
+                    properties = mapBoundaries,
+                    onMapClick = { latLng ->
+                        latLagLocation = latLng
+                        textLocation = "${latLng.latitude}, ${latLng.longitude}"
+                    }
                 ) {
-                    mapLocation?.let { pinLocation ->
+                    latLagLocation?.let { pinLocation ->
                         Marker(
                             state = rememberUpdatedMarkerState(position = pinLocation),
                         )
@@ -926,9 +1028,10 @@ fun SubmitPageLayout(
             ) {
                 // Location Textbox
                 OutlinedTextField(
-                    value = location,
-                    onValueChange = { newText -> location = newText },
-                    label = { Text("Select location") }
+                    value = textLocation,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Select location (using map)") }
                 )
 
                 // Date/Time
@@ -965,7 +1068,7 @@ fun SubmitPageLayout(
                 OutlinedTextField(
                     value = duration,
                     onValueChange = { newValue -> duration = newValue.filter { it.isDigit() } },
-                    label = { Text("Ente5 duration of count (minutes)") },
+                    label = { Text("Enter duration of count (minutes)") },
                 )
             }
         }
@@ -977,7 +1080,12 @@ fun SubmitPageLayout(
             initialSelectedDateMillis = selectedDateTime
                 .atZone(ZoneId.systemDefault())
                 .toInstant()
-                .toEpochMilli()
+                .toEpochMilli(),
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                    return utcTimeMillis <= System.currentTimeMillis()
+                }
+            }
         )
 
         DatePickerDialog(
@@ -1022,9 +1130,21 @@ fun SubmitPageLayout(
             onDismissRequest = { showTimePicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    selectedDateTime = selectedDateTime
+                    val candidateDateTime = selectedDateTime
                         .withHour(timePickerState.hour)
                         .withMinute(timePickerState.minute)
+
+                    if (candidateDateTime.isAfter(LocalDateTime.now())) {
+                        selectedDateTime = LocalDateTime.now()
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                message = "Time can't be in the future.",
+                                duration = SnackbarDuration.Short
+                            )
+                        }
+                    } else {
+                        selectedDateTime = candidateDateTime
+                    }
                     showTimePicker = false
                 }) { Text("Ok") }
             },

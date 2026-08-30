@@ -13,7 +13,7 @@
         android:theme="@style/Theme.Herptofauna">
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="YOUR_MAPS_API_KEY_HERE" />
+            android:value="AIzaSyBkIA4IHV6NkPdJY33SYDNk-n5cGsN84Lc" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
