@@ -404,22 +404,28 @@ fun calcDuration(startTime: LocalDateTime, endTime: LocalDateTime): Int {
     return duration.toMinutes().toInt()
 }
 
+fun Double.roundTo(decimals: Int): Double {
+    var muiplier = 1.0
+    repeat(decimals) {muiplier *= 10}
+    return kotlin.math.round(this * muiplier) / muiplier
+}
+
 val speciesData = listOf(
-    Species( 0, "Oligosoma grande", "Grand Skink", ""),
-    Species( 1, "Oligosoma repens", "Eyres Skink", ""),
-    Species( 2, "Oligosoma inconspicuum", "Cyptic Skink", ""),
-    Species( 3, "Oligosoma judgei", "Barrier Skink", ""),
-    Species( 4, "Oligosoma maccanni", "McCann's Skink", ""),
-    Species( 5, "Oligosoma otagense", "Otago Skink", ""),
-    Species( 6, "Oligosoma polychroma", "New Zealand Grass Skink", ""),
-    Species( 7, "Oligosoma toka", "Nevis Skink", ""),
-    Species( 8, "Woodwirthia \"Cromwell\"", "Kawarau Gecko", ""),
-    Species( 9, "Woodworthia \"Central Otago\"", "Schist Gecko", ""),
-    Species( 10, "Woodworthia \"Otago/Southland large\"", "Korero Gecko", ""),
-    Species( 11, "Woodworthia \"southern alps\"", "Southern Alps Gecko", ""),
-    Species( 12, "Woodworthia \"southern mini\"", "Short-toed Gecko", ""),
-    Species( 13, "Woodworthia \"Raggedy Range\"", "Raggedy Range Gecko", ""),
-    Species( 14, "Woodworthia \"south-western\"", "Mountain Beech Gecko", ""),
+    Species( 0, "Oligosoma grande", "Grand Skink, Tāmaka", ""),
+    Species( 1, "Oligosoma repens", "Eyres Skink, Mokomoko", ""),
+    Species( 2, "Oligosoma inconspicuum", "Cyptic Skink, Mokomoko", ""),
+    Species( 3, "Oligosoma judgei", "Barrier Skink, Mokomoko", ""),
+    Species( 4, "Oligosoma maccanni", "McCann's Skink, Mokomoko", ""),
+    Species( 5, "Oligosoma otagense", "Otago Skink, Tāmaka", ""),
+    Species( 6, "Oligosoma polychroma", "New Zealand Grass Skink, Mokomoko", ""),
+    Species( 7, "Oligosoma toka", "Nevis Skink, Mokomoko", ""),
+    Species( 8, "Woodworthia \"Cromwell\"", "Kawarau Gecko, Moko pāpapapa", ""),
+    Species( 9, "Woodworthia \"Central Otago\"", "Schist Gecko, Moko pāpapapa", ""),
+    Species( 10, "Woodworthia \"Otago/Southland large\"", "Kōrero Gecko, Kōrero", ""),
+    Species( 11, "Woodworthia \"southern alps\"", "Southern Alps Gecko, Moko pāpapapa", ""),
+    Species( 12, "Woodworthia \"southern mini\"", "Short-toed Gecko, Moko pāpapapa", ""),
+    Species( 13, "Woodworthia \"Raggedy Range\"", "Raggedy Range Gecko, Moko pāpapapa", ""),
+    Species( 14, "Woodworthia \"south-western\"", "Mountain Beech Gecko, Moko pāpapapa", ""),
     )
 
 // Displays species in list
@@ -835,6 +841,10 @@ fun SubmitPageLayout(
     viewModel: SurveyViewModel,
     modifier: Modifier = Modifier
 ) {
+    // Alert dialogs
+    var showWarningDialog by remember { mutableStateOf(false) }
+    var warningDialogMessage by remember { mutableStateOf("") }
+
     // The one, the only snackbarHostState :)
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -903,9 +913,6 @@ fun SubmitPageLayout(
     val isDurationInvalid = duration.toIntOrNull() == null
     val isLocationInvalid = textLocation.isBlank()
 
-    // Overall Completion
-    val isFormValid = isDurationInvalid && isLocationInvalid
-
     Scaffold(
         snackbarHost = {
             SnackbarHost(hostState = snackbarHostState)
@@ -947,32 +954,38 @@ fun SubmitPageLayout(
 
                         val durationInt = duration.toIntOrNull() ?: 0
 
-                        scope.launch(Dispatchers.IO) {
-                            val currentEventId = observationDao.insertObservation(
-                                Observation(
-                                    location = textLocation,
-                                    dateTime = selectedDateTime,
-                                    duration = durationInt
-                                )
-                            ).toInt()
+                        if (durationInt > 60) {
+                            warningDialogMessage =
+                                "The duration is longer than 60 minutes. Are you sure you want to continue?"
+                            showWarningDialog = true
+                        } else {
 
-                            if(currentEventId > 0) {
-                                val checklistDao = database.checklistDao()
-                                speciesCounts.forEach { (speciesId, count) ->
-                                    commitChecklist(
-                                        checklistDao = checklistDao,
-                                        count = count,
-                                        userComment = "",
-                                        eventId = currentEventId,
-                                        speciesId = speciesId,
+                            scope.launch(Dispatchers.IO) {
+                                val currentEventId = observationDao.insertObservation(
+                                    Observation(
+                                        location = textLocation,
+                                        dateTime = selectedDateTime,
+                                        duration = durationInt
+                                    )
+                                ).toInt()
+
+                                if(currentEventId > 0) {
+                                    val checklistDao = database.checklistDao()
+                                    speciesCounts.forEach { (speciesId, count) ->
+                                        commitChecklist(
+                                            checklistDao = checklistDao,
+                                            count = count,
+                                            userComment = "",
+                                            eventId = currentEventId,
+                                            speciesId = speciesId,
 
                                         )
+                                    }
                                 }
-                            }
-
-                            kotlinx.coroutines.withContext(Dispatchers.Main) {
-                                navController.navigate(HerptofaunaScreen.HomePage.route) {
-                                    popUpTo(0) { inclusive = true }
+                                kotlinx.coroutines.withContext(Dispatchers.Main) {
+                                    navController.navigate(HerptofaunaScreen.HomePage.route) {
+                                        popUpTo(0) { inclusive = true }
+                                    }
                                 }
                             }
                         }
@@ -1007,8 +1020,11 @@ fun SubmitPageLayout(
                     cameraPositionState = cameraPositionState,
                     properties = mapBoundaries,
                     onMapClick = { latLng ->
-                        latLagLocation = latLng
-                        textLocation = "${latLng.latitude}, ${latLng.longitude}"
+                        val roundedLat = latLng.latitude.roundTo(6)
+                        val roundedLng = latLng.longitude.roundTo(6)
+
+                        latLagLocation = LatLng(roundedLat, roundedLng)
+                        textLocation = "${roundedLat}, ${roundedLng}"
                     }
                 ) {
                     latLagLocation?.let { pinLocation ->
@@ -1072,6 +1088,57 @@ fun SubmitPageLayout(
                 )
             }
         }
+    }
+
+    if (showWarningDialog) {
+        AlertDialog(
+        onDismissRequest = { showWarningDialog = false},
+            title = { Text("Verify Duration") },
+            text = {Text(warningDialogMessage) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showWarningDialog = false
+                        val durationInt = duration.toIntOrNull() ?: 0
+
+                        scope.launch(Dispatchers.IO) {
+                            val currentEventId = observationDao.insertObservation(
+                                Observation(
+                                    location = textLocation,
+                                    dateTime = selectedDateTime,
+                                    duration = durationInt
+                                )
+                            ).toInt()
+
+                            if (currentEventId > 0) {
+                                val checklistDao = database.checklistDao()
+                                speciesCounts.forEach { (speciesId, count) ->
+                                    commitChecklist(
+                                        checklistDao = checklistDao,
+                                        count = count,
+                                        userComment = "",
+                                        eventId = currentEventId,
+                                        speciesId = speciesId,
+                                    )
+                                }
+                            }
+                            kotlinx.coroutines.withContext(Dispatchers.Main) {
+                                navController.navigate(HerptofaunaScreen.HomePage.route) {
+                                    popUpTo(0) { inclusive = true }
+                                }
+                            }
+                        }
+                    }
+                ) {
+                    Text("Continue")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWarningDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     // Date picker stuff
